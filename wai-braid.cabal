@@ -37,7 +37,8 @@ library
       wai,
       http-types,
       bytestring,
-      wai-extra
+      wai-extra,
+      case-insensitive
   default-language: Haskell2010
 
 test-suite wai-braid-test
