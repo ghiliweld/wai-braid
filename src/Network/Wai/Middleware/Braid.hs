@@ -99,4 +99,4 @@ braidify =
     . subscriptionMiddleware 
     . addHeaders 
         (map (\(x, y) -> (BC.pack x, BC.pack y)) 
-        [("Range-Request-Allow-Methods", "PATCH, PUT"), ("Range-Request-Allow-Units", "json"), ("Patches", "OK")])
+        [("Range-Request-Allow-Methods", "PATCH, PUT"), ("Range-Request-Allow-Units", "json"), ("Patches", "OK"), ("Merge-Type", "sync9")])
