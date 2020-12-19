@@ -1,6 +1,6 @@
 module Network.Wai.Middleware.Braid
     ( 
- --       braidify
+        braidify
     ) where
 
 import Network.HTTP.Types   (Header)
