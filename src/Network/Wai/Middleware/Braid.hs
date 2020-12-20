@@ -3,21 +3,10 @@
 module Network.Wai.Middleware.Braid
     ( 
         -- * Middleware
-        braidify,
-        subscriptionMiddleware,
-        modifyStatusTo209,
-        -- * Status
-        status209,
-        -- * Header
-        hSub,
-        hVer,
-        lookupHeader,
-        -- * helpers
-        hasSubscription,
-        getVersion,
-        hasVersion
+        braidify
     ) where
 
+import Network.HTTP.Types.Method   (Method, methodGet, methodPut, methodPatch)
 import Network.HTTP.Types.Header   (Header, HeaderName, RequestHeaders, ResponseHeaders)
 import Network.HTTP.Types.Status   (Status, mkStatus)
 import Network.Wai          (Middleware, modifyResponse, ifRequest, mapResponseHeaders, mapResponseStatus)
@@ -27,18 +16,14 @@ import Data.ByteString      (ByteString, find)
 import qualified Data.CaseInsensitive  as CI
 import qualified Data.ByteString.Char8 as BC
 
-{-|
-    braidify
-    ---------
-    braidify acts as a wai middleware, it :
-    1. sets header to ('Range-Request-Allow-Methods', 'PATCH, PUT'), ('Range-Request-Allow-Units', 'json'), ("Patches", "OK")
-    2. parse header for version, parents, and subscription
-    3. add sendVersion, patches(JSON), and startSubscription helpers to request and response
--}
+isGetRequest, isPutRequest, isPatchRequest :: Request -> Bool
+isGetRequest req = requestMethod req == methodGet
+isPutRequest req = requestMethod req == methodPut
+isPatchRequest req = requestMethod req == methodPatch
 
 -- new status code for subscriptions in braid
 status209 :: Status
-status209 = mkStatus 209 "Subscribed"
+status209 = mkStatus 209 "Subscription"
 
 modifyStatusTo209 :: Middleware
 modifyStatusTo209 = modifyResponse $ mapResponseStatus (const status209)
@@ -50,7 +35,7 @@ lookupHeader v ((n, s):t)
     | otherwise =  lookupHeader v t
 
 hSub :: HeaderName
-hSub = CI.mk "Subscribe"
+hSub = "Subscribe"
 
 getSubscription :: Request -> Maybe ByteString
 getSubscription req = lookupHeader hSub $ requestHeaders req
@@ -61,10 +46,11 @@ hasSubscription req =
         Just s -> True
         Nothing -> False
 
--- still have to add ('cache-control', 'no-cache, no-transform') and ('content-type', 'application/json') to headers
+-- still have to add ('Cache-Control', 'no-cache, no-transform') and ('content-type', 'application/json') to headers
 addSubscriptionHeader :: ByteString -> Response -> Response
-addSubscriptionHeader s = mapResponseHeaders (\hs -> (hSub, s) : hs)
+addSubscriptionHeader s = mapResponseHeaders (\hs -> (hSub, s) : ("Cache-Control", "no-cache, no-transform") : hs)
 
+-- still needs mechanism to keep alive, i.e. keeping the response connection open
 subscriptionMiddleware :: Middleware
 subscriptionMiddleware = subscriptionMiddleware' . modifyStatusTo209
     where
@@ -75,7 +61,7 @@ subscriptionMiddleware = subscriptionMiddleware' . modifyStatusTo209
                 Nothing -> app req respond
 
 hVer :: HeaderName   
-hVer = CI.mk "Version"
+hVer = "Version"
 
 getVersion :: Request -> Maybe ByteString
 getVersion req = lookupHeader hVer $ requestHeaders req
@@ -91,12 +77,29 @@ addVersionHeader s = mapResponseHeaders (\hs -> (hVer, s) : hs)
 
 versionMiddleware :: Middleware
 versionMiddleware app req respond = 
-    case getVersion req of
-        Just v -> app req $ respond . addVersionHeader v
-        Nothing -> app req respond
+    case (getVersion req, isGetRequest req) of
+        (Just v, True) -> app req $ respond . addVersionHeader v
+        _              -> app req respond
+
+addMergeTypeHeader :: Middleware
+addMergeTypeHeader = ifRequest isGetRequest $ addHeaders [("Merge-Type", "sync9")]
+
+addPatchHeader :: Middleware
+addPatchHeader = ifRequest isPutRequest $ addHeaders [("Patches", "OK")]
+
+{-|
+    braidify
+    ---------
+    braidify acts as a wai middleware, it :
+    1. sets header to ('Range-Request-Allow-Methods', 'PATCH, PUT'), ('Range-Request-Allow-Units', 'json'), ("Patches", "OK")
+    2. parse header for version, parents, and subscription
+    3. add sendVersion, patches(JSON), and startSubscription helpers to request and response
+-}
 
 braidify :: Middleware
 braidify =
     versionMiddleware
-    . subscriptionMiddleware 
-    . addHeaders [("Range-Request-Allow-Methods", "PATCH, PUT"), ("Range-Request-Allow-Units", "json"), ("Patches", "OK"), ("Merge-Type", "sync9")]
+    . subscriptionMiddleware
+    . addMergeTypeHeader
+    . addPatchHeader
+    . addHeaders [("Range-Request-Allow-Methods", "PATCH, PUT"), ("Range-Request-Allow-Units", "json")]
