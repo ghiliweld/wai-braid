@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-} -- this overloads String literals default to ByteString
+
 module Network.Wai.Middleware.Braid
     ( 
         -- * Middleware
@@ -36,7 +38,7 @@ import qualified Data.ByteString.Char8 as BC
 
 -- new status code for subscriptions in braid
 status209 :: Status
-status209 = mkStatus 209 (BC.pack "Subscribed")
+status209 = mkStatus 209 "Subscribed"
 
 modifyStatusTo209 :: Middleware
 modifyStatusTo209 = modifyResponse $ mapResponseStatus (const status209)
@@ -48,7 +50,7 @@ lookupHeader v ((n, s):t)
     | otherwise =  lookupHeader v t
 
 hSub :: HeaderName
-hSub = CI.mk $ BC.pack "Subscribe"
+hSub = CI.mk "Subscribe"
 
 getSubscription :: Request -> Maybe ByteString
 getSubscription req = lookupHeader hSub $ requestHeaders req
@@ -73,7 +75,7 @@ subscriptionMiddleware = subscriptionMiddleware' . modifyStatusTo209
                 Nothing -> app req respond
 
 hVer :: HeaderName   
-hVer = CI.mk $ BC.pack "Version"
+hVer = CI.mk "Version"
 
 getVersion :: Request -> Maybe ByteString
 getVersion req = lookupHeader hVer $ requestHeaders req
@@ -97,6 +99,4 @@ braidify :: Middleware
 braidify =
     versionMiddleware
     . subscriptionMiddleware 
-    . addHeaders 
-        (map (\(x, y) -> (BC.pack x, BC.pack y)) 
-        [("Range-Request-Allow-Methods", "PATCH, PUT"), ("Range-Request-Allow-Units", "json"), ("Patches", "OK"), ("Merge-Type", "sync9")])
+    . addHeaders [("Range-Request-Allow-Methods", "PATCH, PUT"), ("Range-Request-Allow-Units", "json"), ("Patches", "OK"), ("Merge-Type", "sync9")]
