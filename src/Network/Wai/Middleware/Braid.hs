@@ -9,12 +9,16 @@ module Network.Wai.Middleware.Braid
 import Network.HTTP.Types.Method   (Method, methodGet, methodPut, methodPatch)
 import Network.HTTP.Types.Header   (Header, HeaderName, RequestHeaders, ResponseHeaders)
 import Network.HTTP.Types.Status   (Status, mkStatus)
-import Network.Wai          (Middleware, modifyResponse, ifRequest, mapResponseHeaders, mapResponseStatus)
+import Network.Wai          (Middleware, responseStream, modifyResponse, ifRequest, mapResponseHeaders, mapResponseStatus)
 import Network.Wai.Middleware.AddHeaders (addHeaders)
+import Network.Wai.EventSource (ServerEvent, eventData)
 import Network.Wai.Internal (Response(..), Request(..))
-import Data.ByteString      (ByteString, find)
+import Data.ByteString      (ByteString, breakSubstring)
 import qualified Data.CaseInsensitive  as CI
 import qualified Data.ByteString.Char8 as BC
+import Data.Function (fix)
+import Data.Foldable (for_)
+import Control.Concurrent.Chan (Chan, dupChan, readChan)
 
 isGetRequest, isPutRequest, isPatchRequest :: Request -> Bool
 isGetRequest req = requestMethod req == methodGet
@@ -39,6 +43,11 @@ hSub = "Subscribe"
 
 getSubscription :: Request -> Maybe ByteString
 getSubscription req = lookupHeader hSub $ requestHeaders req
+
+getSubscriptionKeepAliveTime :: Request -> ByteString
+getSubscriptionKeepAliveTime req =
+    let Just str = lookupHeader hSub $ requestHeaders req 
+    in snd $ breakSubstring "=" str
 
 hasSubscription :: Request -> Bool
 hasSubscription req = 
@@ -87,6 +96,18 @@ addMergeTypeHeader = ifRequest isGetRequest $ addHeaders [("Merge-Type", "sync9"
 addPatchHeader :: Middleware
 addPatchHeader = ifRequest isPutRequest $ addHeaders [("Patches", "OK")]
 
+hPatch :: HeaderName
+hPatch = "Patches"
+
+getPatches :: Request -> Maybe ByteString
+getPatches req = lookupHeader hPatch $ requestHeaders req
+
+hasPatches :: Request -> Bool
+hasPatches req = 
+    case getPatches req of
+        Just s -> True
+        Nothing -> False
+
 {-|
     braidify
     ---------
@@ -103,3 +124,44 @@ braidify =
     . addMergeTypeHeader
     . addPatchHeader
     . addHeaders [("Range-Request-Allow-Methods", "PATCH, PUT"), ("Range-Request-Allow-Units", "json")]
+
+{-|
+    Subscriptions
+    -------------
+    when we get a subscription request we set up a watcher for updates at a certain channel,
+    we then wait for updates to that channel to send them to the client
+
+    we define 3 helper functions for managing subscriptions:
+    - catchUpdate
+    - makePatch
+    - sendPatch
+
+    note: 
+        - write a robust patch type Patch
+        - write a newPatchChan function to instantiate a (Chan Patch) channel
+        - write a urlPatchMap to map raw url paths to Patch channels
+
+    --REQUEST SIDE--
+
+    catchUpdate
+    ------------
+    this will be setup on each PUT request to catch these updates, make a patch from it and funnel them to the appropriate channel,
+    maybe implement as middleware?
+
+    note: uses makePatch
+
+    catchUpdate :: Middleware
+    catchUpdate = ifRequest isPutRequest $ funnelUpdate makePatch urlPathMaps
+
+    makePatch
+    ------------
+    this takes a PUT request, parse it, and makes a version update out of it.
+
+    --RESPONSE SIDE---
+    on any GET route that can be subcribed to, add sendPatch if the request is a subscription request
+    
+    sendPatch
+    ------------
+    takes in a channel and watches for new updates to that channel, writing those updates to the client.
+
+-}
