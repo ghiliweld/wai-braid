@@ -15,10 +15,7 @@ import Network.Wai.EventSource (ServerEvent, eventData)
 import Network.Wai.Internal (Response(..), Request(..))
 import Data.ByteString      (ByteString, breakSubstring)
 import qualified Data.CaseInsensitive  as CI
-import qualified Data.ByteString.Char8 as BC
-import Data.Function (fix)
-import Data.Foldable (for_)
-import Control.Concurrent.Chan (Chan, dupChan, readChan)
+import qualified Data.ByteString.Char8 as BCs
 
 isGetRequest, isPutRequest, isPatchRequest :: Request -> Bool
 isGetRequest req = requestMethod req == methodGet
@@ -133,13 +130,7 @@ braidify =
 
     we define 3 helper functions for managing subscriptions:
     - catchUpdate
-    - makePatch
-    - sendPatch
-
-    note: 
-        - write a robust patch type Patch
-        - write a newPatchChan function to instantiate a (Chan Patch) channel
-        - write a urlPatchMap to map raw url paths to Patch channels
+    - sendUpdate
 
     --REQUEST SIDE--
 
@@ -148,20 +139,27 @@ braidify =
     this will be setup on each PUT request to catch these updates, make a patch from it and funnel them to the appropriate channel,
     maybe implement as middleware?
 
-    note: uses makePatch
-
-    catchUpdate :: Middleware
-    catchUpdate = ifRequest isPutRequest $ funnelUpdate makePatch urlPathMaps
-
-    makePatch
-    ------------
-    this takes a PUT request, parse it, and makes a version update out of it.
+    catchUpdate :: Chan Update -> Middleware
+    catchUpdate src = ifRequest isPutRequest
+        src' <- liftIO $ dupChan src 
+        $ \app req res -> do
+            writeChan src' $ requestToUpdate req
+            app req res
 
     --RESPONSE SIDE---
     on any GET route that can be subcribed to, add sendPatch if the request is a subscription request
     
-    sendPatch
+    sendUpdate
     ------------
     takes in a channel and watches for new updates to that channel, writing those updates to the client.
 
+    sendUpdate :: ResponseHeaders -> Chan Update -> [Text] -> Response
+    sendUpdate headers src topic = responseStream
+        status209
+        headers
+        $ \write flush -> do
+            flush
+            fix $ \loop -> do
+                update <- onUpdate src topic
+                write $ updateToBuilder update >> flush >> loops
 -}
