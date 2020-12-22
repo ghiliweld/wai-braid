@@ -13,9 +13,13 @@ import Network.Wai          (Middleware, responseStream, modifyResponse, ifReque
 import Network.Wai.Middleware.AddHeaders (addHeaders)
 import Network.Wai.EventSource (ServerEvent, eventData)
 import Network.Wai.Internal (Response(..), Request(..))
+import Control.Concurrent.Chan (Chan, newChan, dupChan, readChan, writeChan)
+import Control.Monad.IO.Class (liftIO)
 import Data.ByteString      (ByteString, breakSubstring)
 import qualified Data.CaseInsensitive  as CI
-import qualified Data.ByteString.Char8 as BCs
+import qualified Data.ByteString.Char8 as BC
+
+import Network.Wai.Middleware.Update (Update, requestToUpdate)
 
 isGetRequest, isPutRequest, isPatchRequest :: Request -> Bool
 isGetRequest req = requestMethod req == methodGet
@@ -138,15 +142,16 @@ braidify =
     ------------
     this will be setup on each PUT request to catch these updates, make a patch from it and funnel them to the appropriate channel,
     maybe implement as middleware?
+-}
 
-    catchUpdate :: Chan Update -> Middleware
-    catchUpdate src = ifRequest isPutRequest
-        src' <- liftIO $ dupChan src 
-        $ \app req res -> do
-            writeChan src' $ requestToUpdate req
-            app req res
+catchUpdate :: Chan Update -> Middleware
+catchUpdate src = ifRequest isPutRequest 
+    $ \app req res -> do
+        src' <- liftIO $ dupChan src
+        writeChan src' $ requestToUpdate req
+        app req res
 
-    --RESPONSE SIDE---
+{-|    --RESPONSE SIDE---
     on any GET route that can be subcribed to, add sendPatch if the request is a subscription request
     
     sendUpdate
