@@ -30,8 +30,3 @@ requestToUpdate req = Update {
     updateHeaders = requestHeaders req,
     updatePatches = getRequestBodyChunk req
 }
-
--- onUpdate :: Chan Update -> [Text] -> Update
--- onUpdate src topic = do
---     u <- readChan src
---     if updateTopic u == topic then return u

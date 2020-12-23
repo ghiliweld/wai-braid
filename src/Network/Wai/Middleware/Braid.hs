@@ -60,12 +60,19 @@ hasSubscription req =
 addSubscriptionHeader :: ByteString -> Response -> Response
 addSubscriptionHeader s = mapResponseHeaders (\hs -> (hSub, s) : ("Cache-Control", "no-cache, no-transform") : hs)
 
+catchUpdate :: Chan Update -> Middleware
+catchUpdate src = ifRequest isPutRequest 
+    $ \app req res -> do
+        src' <- liftIO $ dupChan src
+        writeChan src' $ requestToUpdate req
+        app req res
+
 -- still needs mechanism to keep alive, i.e. keeping the response connection open
-subscriptionMiddleware :: Middleware
-subscriptionMiddleware = subscriptionMiddleware' . modifyStatusTo209
+subscriptionMiddleware :: Chan Update -> Middleware
+subscriptionMiddleware src = catchUpdate src . modifyHeaderToSub . modifyStatusTo209
     where
-        subscriptionMiddleware' :: Middleware
-        subscriptionMiddleware' app req respond = 
+        modifyHeaderToSub :: Middleware
+        modifyHeaderToSub app req respond = 
             case getSubscription req of
                 Just v -> app req $ respond . addSubscriptionHeader v
                 Nothing -> app req respond
@@ -118,14 +125,6 @@ hasPatches req =
     3. add sendVersion, patches(JSON), and startSubscription helpers to request and response
 -}
 
-braidify :: Middleware
-braidify =
-    versionMiddleware
-    . subscriptionMiddleware
-    . addMergeTypeHeader
-    . addPatchHeader
-    . addHeaders [("Range-Request-Allow-Methods", "PATCH, PUT"), ("Range-Request-Allow-Units", "json")]
-
 {-|
     Subscriptions
     -------------
@@ -144,13 +143,6 @@ braidify =
     maybe implement as middleware?
 -}
 
-catchUpdate :: Chan Update -> Middleware
-catchUpdate src = ifRequest isPutRequest 
-    $ \app req res -> do
-        src' <- liftIO $ dupChan src
-        writeChan src' $ requestToUpdate req
-        app req res
-
 {-|    --RESPONSE SIDE---
     on any GET route that can be subcribed to, add sendPatch if the request is a subscription request
     
@@ -168,3 +160,11 @@ catchUpdate src = ifRequest isPutRequest
                 update <- onUpdate src topic
                 write $ updateToBuilder update >> flush >> loops
 -}
+
+braidify :: Chan Update -> Middleware
+braidify src =
+    versionMiddleware
+    . subscriptionMiddleware src
+    . addMergeTypeHeader
+    . addPatchHeader
+    . addHeaders [("Range-Request-Allow-Methods", "PATCH, PUT"), ("Range-Request-Allow-Units", "json")]
