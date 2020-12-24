@@ -40,7 +40,8 @@ library
       bytestring,
       wai-extra,
       case-insensitive,
-      text
+      text,
+      conduit
   default-language: Haskell2010
 
 test-suite wai-braid-test

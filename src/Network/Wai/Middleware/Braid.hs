@@ -12,14 +12,15 @@ import Network.HTTP.Types.Status   (Status, mkStatus)
 import Network.Wai          (Middleware, responseStream, modifyResponse, ifRequest, mapResponseHeaders, mapResponseStatus)
 import Network.Wai.Middleware.AddHeaders (addHeaders)
 import Network.Wai.EventSource (ServerEvent, eventData)
-import Network.Wai.Internal (Response(..), Request(..))
+import Network.Wai.Internal (Response(..), Request(..), getRequestBodyChunk)
 import Control.Concurrent.Chan (Chan, newChan, dupChan, readChan, writeChan)
 import Control.Monad.IO.Class (liftIO)
 import Data.ByteString      (ByteString, breakSubstring)
+import Data.Function (fix)
 import qualified Data.CaseInsensitive  as CI
 import qualified Data.ByteString.Char8 as BC
 
-import Network.Wai.Middleware.Update (Update, requestToUpdate)
+import Network.Wai.Middleware.Update (Update, Topic, requestToUpdate, updateToBuilder)
 
 isGetRequest, isPutRequest, isPatchRequest :: Request -> Bool
 isGetRequest req = requestMethod req == methodGet
@@ -64,8 +65,9 @@ catchUpdate :: Chan Update -> Middleware
 catchUpdate src = ifRequest isPutRequest 
     $ \app req res -> do
         src' <- liftIO $ dupChan src
-        writeChan src' $ requestToUpdate req
-        app req res
+        getRequestBodyChunk req >>= \b ->  
+            writeChan src' $ requestToUpdate req b 
+        >> app req res
 
 -- still needs mechanism to keep alive, i.e. keeping the response connection open
 subscriptionMiddleware :: Chan Update -> Middleware
@@ -158,8 +160,23 @@ hasPatches req =
             flush
             fix $ \loop -> do
                 update <- onUpdate src topic
-                write $ updateToBuilder update >> flush >> loops
+                case update of
+                    Just u -> write $ updateToBuilder u >> flush >> loop
+                    Nothing -> loop
 -}
+
+sendUpdate :: ResponseHeaders -> Chan Update -> Topic -> Response
+sendUpdate headers src topic = responseStream
+    status209
+    headers
+    $ \write flush -> do
+        flush
+        fix $ \loop -> do
+            src' <- liftIO $ dupChan src
+            update <- readChan src
+            case updateToBuilder topic update of
+                Just b -> write b >> flush >> loop
+                Nothing -> loop
 
 braidify :: Chan Update -> Middleware
 braidify src =
