@@ -173,7 +173,7 @@ sendUpdate headers src topic = responseStream
         flush
         fix $ \loop -> do
             src' <- liftIO $ dupChan src
-            update <- readChan src
+            update <- readChan src'
             case updateToBuilder topic update of
                 Just b -> write b >> flush >> loop
                 Nothing -> loop
