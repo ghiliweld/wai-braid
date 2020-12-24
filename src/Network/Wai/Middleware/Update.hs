@@ -10,7 +10,8 @@ module Network.Wai.Middleware.Update
     ) where
 
 import qualified Data.ByteString   as B   (ByteString, empty, find, append, concat, intercalate)
-import Network.Wai.Internal (Response(..), Request(..), StreamingBody, getRequestBodyChunk)
+import Network.Wai (Response(..), Request(..), StreamingBody, getRequestBodyChunk)
+import qualified Data.ByteString.Lazy  as L
 import Data.ByteString.Builder (Builder, byteString, string7)
 import Data.Text            (Text)
 import qualified Data.CaseInsensitive  as CI
@@ -28,10 +29,10 @@ type Topic = [Text]
 data Update = Update {
     updateTopic :: [Text],                  -- from request path
     updateHeaders :: H.RequestHeaders,      -- from request headers
-    updatePatches :: B.ByteString          -- from request body
+    updatePatches :: L.ByteString          -- from request body
 }
 
-requestToUpdate :: Request -> B.ByteString -> Update
+requestToUpdate :: Request -> L.ByteString -> Update
 requestToUpdate req body = Update {
     updateTopic = pathInfo req,
     updateHeaders = requestHeaders req,
@@ -50,7 +51,7 @@ updateToBuilder topic update =
     where
         updateToBuilder' :: Update -> Builder
         updateToBuilder' update =
-            byteString $ headers `B.append` "\n" `B.append` body
+            byteString $ headers `B.append` "\n" `B.append` L.toStrict body
             where
                 headers = B.intercalate "\n" $ map (\(h, v) -> CI.original h `B.append` separator `B.append` v) (updateHeaders update)
                 body = updatePatches update

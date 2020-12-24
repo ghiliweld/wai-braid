@@ -27,7 +27,7 @@ module Network.Wai.Middleware.Braid
 import Network.HTTP.Types.Method   (Method, methodGet, methodPut, methodPatch)
 import Network.HTTP.Types.Header   (Header, HeaderName, RequestHeaders, ResponseHeaders)
 import Network.HTTP.Types.Status   (Status, mkStatus)
-import Network.Wai          (Middleware, responseStream, modifyResponse, ifRequest, mapResponseHeaders, mapResponseStatus)
+import Network.Wai          (Middleware, responseStream, modifyResponse, ifRequest, mapResponseHeaders, mapResponseStatus, strictRequestBody)
 import Network.Wai.Middleware.AddHeaders (addHeaders)
 import Network.Wai.EventSource (ServerEvent, eventData)
 import Network.Wai.Internal (Response(..), Request(..), getRequestBodyChunk)
@@ -85,12 +85,12 @@ subscriptionMiddleware src = catchUpdate src . modifyHeadersToSub . modifyStatus
                 Nothing -> app req respond
         modifyStatusTo209 :: Middleware
         modifyStatusTo209 = ifRequest hasSubscription $ modifyResponse $ mapResponseStatus (const status209)
-        -- TODO: we're not consuming the full request body here, only the first chunk
+        -- NOTE: we're consuming the full request body, maybe there's a better way of doing this? idk
         catchUpdate :: Chan Update -> Middleware
         catchUpdate src = ifRequest isPutRequest 
             $ \app req res -> do
                 src' <- liftIO $ dupChan src
-                getRequestBodyChunk req >>= \b ->  
+                strictRequestBody req >>= \b ->  
                     writeChan src' $ requestToUpdate req b 
                 >> app req res
 
