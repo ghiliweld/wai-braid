@@ -50,8 +50,8 @@ updateToBuilder topic update =
     where
         updateToBuilder' :: Update -> Builder
         updateToBuilder' update =
-            byteString $ B.append headers $ B.append "\n" body
+            byteString $ headers `B.append` "\n" `B.append` body
             where
-                headers = B.intercalate "\n" $ map (\(h, v) -> B.append (CI.original h) $ B.append separator v) (updateHeaders update)
+                headers = B.intercalate "\n" $ map (\(h, v) -> CI.original h `B.append` separator `B.append` v) (updateHeaders update)
                 body = updatePatches update
         builder = updateToBuilder' update
