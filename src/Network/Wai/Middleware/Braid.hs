@@ -140,7 +140,7 @@ hasPatches req = isJust $ getPatches req
         - adds Subscribe header to response (if request has a Subscription header)
         - catches updates and writes them to a Update channel to be propagated to subscribers (if request is a PUT request)
 
-    all of this is in line with the braid protocol spec, outline here:
+    all of this is in line with the braid protocol spec, outlined here:
         https://raw.githubusercontent.com/braid-work/braid-spec/master/draft-toomim-httpbis-braid-http-03.txt
 
     Subscriptions
