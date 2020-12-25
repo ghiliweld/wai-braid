@@ -44,15 +44,13 @@ separator :: B.ByteString
 separator = BC.pack ": "
 
 updateToBuilder :: Topic -> Update -> Maybe Builder
-updateToBuilder topic update = 
-    if updateTopic update == topic
-        then Just builder
-        else Nothing
+updateToBuilder topic (Update t h p) 
+    | t /= topic = Nothing
+    | otherwise = Just builder
     where
-        updateToBuilder' :: Update -> Builder
-        updateToBuilder' update =
-            byteString $ headers `B.append` "\n" `B.append` L.toStrict body
+        updateToBuilder' :: H.RequestHeaders -> L.ByteString -> Builder
+        updateToBuilder' hs b =
+            byteString $ headers `B.append` "\n" `B.append` L.toStrict b
             where
-                headers = B.intercalate "\n" $ map (\(h, v) -> CI.original h `B.append` separator `B.append` v) (updateHeaders update)
-                body = updatePatches update
-        builder = updateToBuilder' update
+                headers = B.intercalate "\n" $ map (\(h, v) -> CI.original h `B.append` separator `B.append` v) hs
+        builder = updateToBuilder' h p
