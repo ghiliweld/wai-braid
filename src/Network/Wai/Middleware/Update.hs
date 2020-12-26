@@ -79,7 +79,7 @@ updateToBuilder topic (Update t h p)
                             .
                             .
                             .
-                            HeaderN: ValueN \n
+                            HeaderN: ValueN
                         "
                 -}
                 headers = B.intercalate "\n" $ map (\(h, v) -> CI.original h `B.append` separator `B.append` v) hs
