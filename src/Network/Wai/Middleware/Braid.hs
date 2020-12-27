@@ -8,7 +8,7 @@ module Network.Wai.Middleware.Braid
         versionMiddleware,
         addMergeTypeHeader, addPatchHeader,
         -- * Subscription helper
-        sendUpdate,
+        streamUpdates,
         -- * Types
         Update, Topic,
         -- * Method helpers
@@ -146,11 +146,11 @@ hasPatches req = isJust $ getPatches req
     Subscriptions
     -------------
     when we get a subscription request we set up a watcher for updates at a certain channel,
-    we then wait for updates to that channel to send them to the client
+    we then wait for updates to that channel to stream them to the client
 
     we define 2 helper functions for managing subscriptions:
     - catchUpdate
-    - sendUpdate
+    - streamUpdates
 
     --REQUEST SIDE--
 
@@ -163,14 +163,14 @@ hasPatches req = isJust $ getPatches req
 
     on any GET route that can be subcribed to, use sendUpdate if the request is a subscription request
     
-    sendUpdate
+    streamUpdates
     ------------
     takes in headers, a channel and a topic, and watches for new updates to that channel, writing those updates to the client.
 
 -}
 
-sendUpdate :: ResponseHeaders -> Chan Update -> Topic -> Response
-sendUpdate headers src topic = responseStream
+streamUpdates :: ResponseHeaders -> Chan Update -> Topic -> Response
+streamUpdates headers src topic = responseStream
     status209
     headers
     $ \write flush -> do
