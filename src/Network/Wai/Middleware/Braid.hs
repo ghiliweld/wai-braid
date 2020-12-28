@@ -1,5 +1,50 @@
 {-# LANGUAGE OverloadedStrings #-} -- this overloads String literals default to ByteString
 
+-- |
+-- Module      :  Network.Wai.Middleware.Braid
+-- Copyright   :  © 2020–present Ghilia Weldesselasie
+-- License     :  BSD 3 clause
+--
+-- Maintainer  :  Ghilia Weldesselasie <ghiliaweld@gmail.com>
+-- Stability   :  experimental
+-- Portability :  portable
+--
+-- === About the library
+--
+-- braidify
+-- ---------
+-- braidify acts as a wai middleware, it :
+-- 1. adds ('Range-Request-Allow-Methods', 'PATCH, PUT'), ('Range-Request-Allow-Units', 'json'), ("Patches", "OK") headers to response
+-- 2. adds Patches OK header to response if the request is a PUT request
+-- 3. adds Merge-Type: sync9 header to response by default is request is a GET request
+-- 4. adds Version header to the response if request has a Version header and is a GET request
+-- 5. applies the subscription middleware, which:
+--     * modifies the status to 209 Subscription (if request has a Subscription header)
+--     * adds Subscribe header to response (if request has a Subscription header)
+--     * catches updates and writes them to a Update channel to be propagated to subscribers (if request is a PUT request)
+--
+-- all of this is in line with the braid protocol spec, outlined here:
+--     https://raw.githubusercontent.com/braid-work/braid-spec/master/draft-toomim-httpbis-braid-http-03.txt
+--
+-- Subscriptions
+-- -------------
+-- when we get a subscription request we set up a watcher for updates at a certain channel,
+-- we then wait for updates to that channel to stream them to the client
+--
+-- we define 2 helper functions for managing subscriptions:
+--  * catchUpdate
+--  * streamUpdates
+--
+-- catchUpdate
+-- ------------
+-- this will be setup on each PUT request to catch these updates, make a patch from it and funnel them to the appropriate channel.
+-- Implemented as middleware and included in subscriptionMiddleware.
+--
+-- streamUpdates
+-- ------------
+-- takes in headers, a channel and a topic, and watches for new updates to that channel, writing those updates to the client.
+-- on any GET route that can be subcribed to, use streamUpdates if the request is a subscription request.
+
 module Network.Wai.Middleware.Braid
     ( 
         -- * Middleware
@@ -30,7 +75,6 @@ import Network.Wai.Middleware.AddHeaders (addHeaders)
 import Control.Concurrent.Chan (Chan, dupChan, readChan, writeChan)
 import Control.Monad.IO.Class (liftIO)
 import Data.Function (fix)
-import Data.Maybe (isJust)
 
 import Network.Wai.Middleware.Braid.Internal
     ( isGetRequest,
@@ -88,46 +132,8 @@ addMergeTypeHeader = ifRequest isGetRequest $ addHeaders [("Merge-Type", "sync9"
 addPatchHeader :: Middleware
 addPatchHeader = ifRequest isPutRequest $ addHeaders [("Patches", "OK")]
 
-{-|
-    braidify
-    ---------
-    braidify acts as a wai middleware, it :
-    1. adds ('Range-Request-Allow-Methods', 'PATCH, PUT'), ('Range-Request-Allow-Units', 'json'), ("Patches", "OK") headers to response
-    2. adds Patches OK header to response if the request is a PUT request
-    3. adds Merge-Type: sync9 header to response by default is request is a GET request
-    4. adds Version header to the response if request has a Version header and is a GET request
-    5. applies the subscription middleware, which:
-        - modifies the status to 209 Subscription (if request has a Subscription header)
-        - adds Subscribe header to response (if request has a Subscription header)
-        - catches updates and writes them to a Update channel to be propagated to subscribers (if request is a PUT request)
-
-    all of this is in line with the braid protocol spec, outlined here:
-        https://raw.githubusercontent.com/braid-work/braid-spec/master/draft-toomim-httpbis-braid-http-03.txt
-
-    Subscriptions
-    -------------
-    when we get a subscription request we set up a watcher for updates at a certain channel,
-    we then wait for updates to that channel to stream them to the client
-
-    we define 2 helper functions for managing subscriptions:
-    - catchUpdate
-    - streamUpdates
-
-    --REQUEST SIDE--
-
-    catchUpdate
-    ------------
-    this will be setup on each PUT request to catch these updates, make a patch from it and funnel them to the appropriate channel.
-    Implemented as middleware and included in subscriptionMiddleware.
-
-    --RESPONSE SIDE---
-
-    on any GET route that can be subcribed to, use sendUpdate if the request is a subscription request
-    
-    streamUpdates
-    ------------
-    takes in headers, a channel and a topic, and watches for new updates to that channel, writing those updates to the client.
-
+{-| 
+    TODO: look into Chan vs BroadcastChan (https://github.com/merijn/broadcast-chan)
 -}
 
 streamUpdates :: ResponseHeaders -> Chan Update -> Topic -> Response
