@@ -24,54 +24,36 @@ module Network.Wai.Middleware.Braid
 
     ) where
 
-import Network.HTTP.Types.Method   (Method, methodGet, methodPut, methodPatch)
-import Network.HTTP.Types.Header   (Header, HeaderName, RequestHeaders, ResponseHeaders)
-import Network.HTTP.Types.Status   (Status, mkStatus)
-import Network.Wai          (Middleware, responseStream, modifyResponse, ifRequest, mapResponseHeaders, mapResponseStatus, strictRequestBody)
+import Network.Wai          (Response(..), Request(..), Middleware, responseStream, modifyResponse, ifRequest, mapResponseHeaders, mapResponseStatus, strictRequestBody)
+import Network.HTTP.Types.Header (Header, HeaderName, RequestHeaders, ResponseHeaders)
 import Network.Wai.Middleware.AddHeaders (addHeaders)
-import Network.Wai.EventSource (ServerEvent, eventData)
-import Network.Wai.Internal (Response(..), Request(..), getRequestBodyChunk)
 import Control.Concurrent.Chan (Chan, dupChan, readChan, writeChan)
 import Control.Monad.IO.Class (liftIO)
-import Data.ByteString      (ByteString, breakSubstring)
 import Data.Function (fix)
 import Data.Maybe (isJust)
-import qualified Data.CaseInsensitive  as CI
-import qualified Data.ByteString.Char8 as BC
 
-import Network.Wai.Middleware.Update (Update, Topic, requestToUpdate, updateToBuilder)
-
-isGetRequest, isPutRequest, isPatchRequest :: Request -> Bool
-isGetRequest req = requestMethod req == methodGet
-isPutRequest req = requestMethod req == methodPut
-isPatchRequest req = requestMethod req == methodPatch
-
--- new status code for subscriptions in braid
-status209 :: Status
-status209 = mkStatus 209 "Subscription"
-
-lookupHeader :: HeaderName -> [Header] -> Maybe ByteString
-lookupHeader _ [] = Nothing
-lookupHeader v ((n, s):t)  
-    |  v == n   =  Just s
-    | otherwise =  lookupHeader v t
-
-hSub :: HeaderName
-hSub = "Subscribe"
-
-getSubscription :: Request -> Maybe ByteString
-getSubscription req = lookupHeader hSub $ requestHeaders req
-
-getSubscriptionKeepAliveTime :: Request -> ByteString
-getSubscriptionKeepAliveTime req =
-    let Just str = lookupHeader hSub $ requestHeaders req 
-    in snd $ breakSubstring "=" str
-
-hasSubscription :: Request -> Bool
-hasSubscription req = isJust $ getSubscription req
-
-addSubscriptionHeader :: ByteString -> Response -> Response
-addSubscriptionHeader s = mapResponseHeaders (\hs -> (hSub, s) : ("Cache-Control", "no-cache, no-transform") : hs)
+import Network.Wai.Middleware.Braid.Internal
+    ( isGetRequest,
+      isPutRequest,
+      isPatchRequest,
+      Update,
+      Topic,
+      status209,
+      requestToUpdate,
+      updateToBuilder,
+      lookupHeader,
+      hSub,
+      getSubscription,
+      getSubscriptionKeepAliveTime,
+      hasSubscription,
+      addSubscriptionHeader,
+      hVer,
+      getVersion,
+      hasVersion,
+      addVersionHeader,
+      hPatch,
+      getPatches,
+      hasPatches )
 
 
 -- TODO: still needs mechanism to keep alive, i.e. keeping the response connection open
@@ -94,18 +76,6 @@ subscriptionMiddleware src = catchUpdate src . modifyHeadersToSub . modifyStatus
                     writeChan src' $ requestToUpdate req b 
                 >> app req res
 
-hVer :: HeaderName   
-hVer = "Version"
-
-getVersion :: Request -> Maybe ByteString
-getVersion req = lookupHeader hVer $ requestHeaders req
-
-hasVersion :: Request -> Bool
-hasVersion req = isJust $ getVersion req
-
-addVersionHeader :: ByteString -> Response -> Response
-addVersionHeader s = mapResponseHeaders (\hs -> (hVer, s) : hs)
-
 versionMiddleware :: Middleware
 versionMiddleware app req respond = 
     case (getVersion req, isGetRequest req) of
@@ -117,15 +87,6 @@ addMergeTypeHeader = ifRequest isGetRequest $ addHeaders [("Merge-Type", "sync9"
 
 addPatchHeader :: Middleware
 addPatchHeader = ifRequest isPutRequest $ addHeaders [("Patches", "OK")]
-
-hPatch :: HeaderName
-hPatch = "Patches"
-
-getPatches :: Request -> Maybe ByteString
-getPatches req = lookupHeader hPatch $ requestHeaders req
-
-hasPatches :: Request -> Bool
-hasPatches req = isJust $ getPatches req
 
 {-|
     braidify

@@ -28,7 +28,7 @@ source-repository head
 library
   exposed-modules:
       Network.Wai.Middleware.Braid
-      Network.Wai.Middleware.Update
+      Network.Wai.Middleware.Braid.Internal
   other-modules:
       Paths_wai_braid
   hs-source-dirs:
