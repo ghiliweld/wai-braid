@@ -23,3 +23,6 @@ application src req respond = respond $
 main :: IO ()
 main = newChan >>= \src -> run 3000 $ braidify src $ application src
 ```
+
+### example tests in cURL
+![curl output](https://pbs.twimg.com/media/EqXRGRtWMAAaYCE?format=jpg&name=4096x4096)
