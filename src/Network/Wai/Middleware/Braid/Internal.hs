@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-} -- this overloads String literals default to ByteString
-
+ 
 module Network.Wai.Middleware.Braid.Internal
     (
         -- * Types

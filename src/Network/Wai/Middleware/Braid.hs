@@ -1,5 +1,4 @@
 {-# LANGUAGE OverloadedStrings #-} -- this overloads String literals default to ByteString
-
 -- |
 -- Module      :  Network.Wai.Middleware.Braid
 -- Copyright   :  © 2020–present Ghilia Weldesselasie
