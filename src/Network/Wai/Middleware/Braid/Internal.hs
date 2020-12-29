@@ -9,10 +9,11 @@ module Network.Wai.Middleware.Braid.Internal
         -- * 209 Status variable
         status209,
         -- * Header helpers & variables
-        hSub, hVer, hParents, hPatch,
+        hSub, hVer, hMerge, hParents, hPatch,
         lookupHeader,
         getSubscription, hasSubscription, getSubscriptionKeepAliveTime, addSubscriptionHeader,
         getVersion, hasVersion, addVersionHeader,
+        getMergeType, hasMergeType, addMergeTypeHeader,
         getParents, hasParents,
         getPatches, hasPatches,
         -- * Update helpers
@@ -107,6 +108,20 @@ hasVersion req = isJust $ getVersion req
 
 addVersionHeader :: B.ByteString -> Response -> Response
 addVersionHeader s = mapResponseHeaders (\hs -> (hVer, s) : hs)
+
+-- MERGE TYPE HEADER HELPERS --
+
+hMerge :: HeaderName   
+hMerge = "Merge-Type"
+
+getMergeType :: Request -> Maybe B.ByteString
+getMergeType req = lookupHeader hMerge $ requestHeaders req
+
+hasMergeType :: Request -> Bool
+hasMergeType req = isJust $ getMergeType req
+
+addMergeTypeHeader :: B.ByteString -> Response -> Response
+addMergeTypeHeader s = mapResponseHeaders (\hs -> (hMerge, s) : hs)
 
 -- PARENTS HEADER HELPERS --
 

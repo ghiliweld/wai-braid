@@ -15,7 +15,6 @@
 -- braidify acts as a wai middleware, it :
 -- 1. adds ('Range-Request-Allow-Methods', 'PATCH, PUT'), ('Range-Request-Allow-Units', 'json'), ("Patches", "OK") headers to response
 -- 2. adds Patches OK header to response if the request is a PUT request
--- 3. adds Merge-Type: sync9 header to response by default is request is a GET request
 -- 4. adds Version header to the response if request has a Version header and is a GET request
 -- 5. applies the subscription middleware, which:
 --     * modifies the status to 209 Subscription (if request has a Subscription header)
@@ -50,7 +49,7 @@ module Network.Wai.Middleware.Braid
         braidify,
         subscriptionMiddleware,
         versionMiddleware,
-        addMergeTypeHeader, addPatchHeader,
+        addPatchHeader,
         -- * Subscription helper
         streamUpdates,
         -- * Types
@@ -60,10 +59,12 @@ module Network.Wai.Middleware.Braid
         -- * 209 Status variable
         status209,
         -- * Header helpers & variables
-        hSub, hVer, hPatch,
+        hSub, hVer, hMerge, hParents, hPatch,
         lookupHeader,
         getSubscription, hasSubscription, getSubscriptionKeepAliveTime, addSubscriptionHeader,
         getVersion, hasVersion, addVersionHeader,
+        getMergeType, hasMergeType, addMergeTypeHeader,
+        getParents, hasParents,
         getPatches, hasPatches
 
     ) where
@@ -94,6 +95,13 @@ import Network.Wai.Middleware.Braid.Internal
       getVersion,
       hasVersion,
       addVersionHeader,
+      hMerge,
+      getMergeType,
+      hasMergeType,
+      addMergeTypeHeader,
+      hParents,
+      getParents,
+      hasParents,
       hPatch,
       getPatches,
       hasPatches )
@@ -125,9 +133,6 @@ versionMiddleware app req respond =
         (Just v, True) -> app req $ respond . addVersionHeader v
         _              -> app req respond
 
-addMergeTypeHeader :: Middleware
-addMergeTypeHeader = ifRequest isGetRequest $ addHeaders [("Merge-Type", "sync9")]
-
 addPatchHeader :: Middleware
 addPatchHeader = ifRequest isPutRequest $ addHeaders [("Patches", "OK")]
 
@@ -152,6 +157,5 @@ braidify :: Chan Update -> Middleware
 braidify src =
     subscriptionMiddleware src
     . versionMiddleware
-    . addMergeTypeHeader
     . addPatchHeader
     . addHeaders [("Range-Request-Allow-Methods", "PATCH, PUT"), ("Range-Request-Allow-Units", "json")]
