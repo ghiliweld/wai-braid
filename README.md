@@ -9,7 +9,7 @@ braid protocol server in haskell, implemented as wai middleware
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
-import Network.Wai.Middleware.Braid (braidify, streamUpdates, hasSubscription, Update)
+import Network.Wai.Middleware.Braid (braidify, streamUpdates, hasSubscription, status209, Update)
 import Network.Wai
 import Control.Concurrent.Chan (Chan, newChan)
 import Network.Wai.Handler.Warp (run)
@@ -17,7 +17,7 @@ import Network.HTTP.Types.Status (status200)
     
 application src req respond = respond $ 
     if hasSubscription req 
-    then streamUpdates [("Content-Type", "text/plain")] src ["topic"]
+    then responseStream status209 [("Content-Type", "text/plain")] $ streamUpdates src ["topic"]
     else responseLBS status200 [("Content-Type", "text/plain")] "Hello World"
 
 main :: IO ()

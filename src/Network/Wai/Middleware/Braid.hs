@@ -40,7 +40,7 @@
 --
 -- streamUpdates
 -- ------------
--- takes in headers, a channel and a topic, and watches for new updates to that channel, writing those updates to the client.
+-- takes a channel and a topic, and watches for new updates to that channel, return a StreamingBody that writes those updates to the client.
 -- on any GET route that can be subcribed to, use streamUpdates if the request is a subscription request.
 
 module Network.Wai.Middleware.Braid
@@ -69,12 +69,13 @@ module Network.Wai.Middleware.Braid
 
     ) where
 
-import Network.Wai          (Response(..), Request(..), Middleware, responseStream, modifyResponse, ifRequest, mapResponseHeaders, mapResponseStatus, strictRequestBody)
+import Network.Wai          (Response(..), Request(..), Middleware, StreamingBody, responseStream, modifyResponse, ifRequest, mapResponseHeaders, mapResponseStatus, strictRequestBody)
 import Network.HTTP.Types.Header (Header, HeaderName, RequestHeaders, ResponseHeaders)
 import Network.Wai.Middleware.AddHeaders (addHeaders)
 import Control.Concurrent.Chan (Chan, dupChan, readChan, writeChan)
 import Control.Monad.IO.Class (liftIO)
 import Data.Function (fix)
+import Data.ByteString.Builder                          (Builder, byteString, string7)
 
 import Network.Wai.Middleware.Braid.Internal
     ( isGetRequest,
@@ -140,15 +141,12 @@ addPatchHeader = ifRequest isPutRequest $ addHeaders [("Patches", "OK")]
     TODO: look into Chan vs BroadcastChan (https://github.com/merijn/broadcast-chan)
 -}
 
-streamUpdates :: ResponseHeaders -> Chan Update -> Topic -> Response
-streamUpdates headers src topic = responseStream
-    status209
-    headers
-    $ \write flush -> do
+streamUpdates :: Chan Update -> Topic -> StreamingBody
+streamUpdates chan topic write flush = do
         flush
-        src' <- liftIO $ dupChan src
+        src <- liftIO $ dupChan chan
         fix $ \loop -> do
-            update <- readChan src'
+            update <- readChan src
             case updateToBuilder topic update of
                 Just b -> write b >> flush >> loop
                 Nothing -> loop
