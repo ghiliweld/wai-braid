@@ -142,13 +142,13 @@ addPatchHeader = ifRequest isPutRequest $ addHeaders [("Patches", "OK")]
     TODO: look into Chan vs BroadcastChan (https://github.com/merijn/broadcast-chan)
 -}
 
-streamUpdates :: Chan Update -> Topic -> Maybe ByteString -> StreamingBody
-streamUpdates chan topic client write flush = do
+streamUpdates :: Chan Update -> Topic -> StreamingBody
+streamUpdates chan topic write flush = do
         flush
         src <- liftIO $ dupChan chan
         fix $ \loop -> do
             update <- readChan src
-            case updateToBuilder topic client update of
+            case updateToBuilder topic update of
                 Just b -> write b >> flush >> loop
                 Nothing -> loop
 
