@@ -5,6 +5,8 @@ module Network.Wai.Middleware.Braid.Internal
     (
         -- * Types
         Update, Topic,
+        -- * Type Classes
+        InChannel(..), OutChannel(..),
         -- * Method helpers
         isGetRequest, isPutRequest, isPatchRequest,
         -- * 209 Status variable
@@ -55,6 +57,12 @@ data Update
     updatePatches :: L.ByteString
 } deriving (Eq, Show)
 
+class InChannel c where
+    writeChannel :: c a -> a -> IO ()
+
+class OutChannel c where
+    readChannel :: c a -> IO a
+    
 --------------------------------------------------------------------------------
 -- METHODS --
 

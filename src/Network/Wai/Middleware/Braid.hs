@@ -1,4 +1,7 @@
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-} -- this overloads String literals default to ByteString
+{-# LANGUAGE MultiParamTypeClasses #-}
+
 -- |
 -- Module      :  Network.Wai.Middleware.Braid
 -- Copyright   :  © 2020–present Ghilia Weldesselasie
@@ -54,6 +57,8 @@ module Network.Wai.Middleware.Braid
         streamUpdates,
         -- * Types
         Update, Topic,
+        -- * Type Classes,
+        InChannel(..), OutChannel(..),
         -- * Method helpers
         isGetRequest, isPutRequest, isPatchRequest,
         -- * 209 Status variable
@@ -84,6 +89,8 @@ import Network.Wai.Middleware.Braid.Internal
       isPatchRequest,
       Update,
       Topic,
+      InChannel(..),
+      OutChannel(..),
       status209,
       requestToUpdate,
       updateToBuilder,
@@ -110,7 +117,7 @@ import Network.Wai.Middleware.Braid.Internal
 
 
 -- TODO: still needs mechanism to keep alive, i.e. keeping the response connection open
-subscriptionMiddleware :: Chan Update -> Middleware
+subscriptionMiddleware :: (InChannel c) => c Update -> Middleware
 subscriptionMiddleware src = catchUpdate src . modifyHeadersToSub . modifyStatusTo209
     where
         modifyHeadersToSub :: Middleware
@@ -121,12 +128,11 @@ subscriptionMiddleware src = catchUpdate src . modifyHeadersToSub . modifyStatus
         modifyStatusTo209 :: Middleware
         modifyStatusTo209 = ifRequest hasSubscription $ modifyResponse $ mapResponseStatus (const status209)
         -- NOTE: we're consuming the full request body, maybe there's a better way of doing this? idk
-        catchUpdate :: Chan Update -> Middleware
+        catchUpdate :: (InChannel c) => c Update -> Middleware
         catchUpdate src = ifRequest isPutRequest 
             $ \app req res -> do
-                src' <- liftIO $ dupChan src
                 strictRequestBody req >>= \b ->  
-                    writeChan src' $ requestToUpdate req b 
+                    writeChannel src $ requestToUpdate req b 
                 >> app req res
 
 versionMiddleware :: Middleware
@@ -138,21 +144,18 @@ versionMiddleware app req respond =
 addPatchHeader :: Middleware
 addPatchHeader = ifRequest isPutRequest $ addHeaders [("Patches", "OK")]
 
-{-| 
-    TODO: look into Chan vs BroadcastChan (https://github.com/merijn/broadcast-chan)
--}
-
-streamUpdates :: Chan Update -> Topic -> StreamingBody
+-- | streams updates to client, reading updates from an OutChannel of type c
+-- this can either be a Chan, BroadcastChan or UnagiChan, just instantiate it with the OutChannel typeclass
+streamUpdates :: (OutChannel c) => c Update -> Topic -> StreamingBody
 streamUpdates chan topic write flush = do
         flush
-        src <- liftIO $ dupChan chan
         fix $ \loop -> do
-            update <- readChan src
-            case updateToBuilder topic update of
+            d <- readChannel chan
+            case updateToBuilder topic d of
                 Just b -> write b >> flush >> loop
                 Nothing -> loop
 
-braidify :: Chan Update -> Middleware
+braidify :: (InChannel c) => c Update -> Middleware
 braidify src =
     subscriptionMiddleware src
     . versionMiddleware

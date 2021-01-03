@@ -14,6 +14,9 @@ import Network.Wai
 import Control.Concurrent.Chan (Chan, newChan)
 import Network.Wai.Handler.Warp (run)
 import Network.HTTP.Types.Status (status200)
+
+instance OutChannel Chan where
+    readChannel = readChan
     
 application src req respond = respond $ 
     if hasSubscription req 
