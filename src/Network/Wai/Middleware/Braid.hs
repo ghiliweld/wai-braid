@@ -1,6 +1,4 @@
-{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-} -- this overloads String literals default to ByteString
-{-# LANGUAGE MultiParamTypeClasses #-}
 
 -- |
 -- Module      :  Network.Wai.Middleware.Braid
@@ -77,11 +75,8 @@ module Network.Wai.Middleware.Braid
 import Network.Wai          (Response(..), Request(..), Middleware, StreamingBody, responseStream, modifyResponse, ifRequest, mapResponseHeaders, mapResponseStatus, strictRequestBody)
 import Network.HTTP.Types.Header (Header, HeaderName, RequestHeaders, ResponseHeaders)
 import Network.Wai.Middleware.AddHeaders (addHeaders)
-import Control.Concurrent.Chan (Chan, dupChan, readChan, writeChan)
-import Control.Monad.IO.Class (liftIO)
 import Data.Function (fix)
 import Data.ByteString (ByteString)
-import Data.ByteString.Builder                          (Builder, byteString, string7)
 
 import Network.Wai.Middleware.Braid.Internal
     ( isGetRequest,
@@ -150,8 +145,8 @@ streamUpdates :: (OutChannel c) => c Update -> Topic -> StreamingBody
 streamUpdates chan topic write flush = do
         flush
         fix $ \loop -> do
-            d <- readChannel chan
-            case updateToBuilder topic d of
+            u <- readChannel chan
+            case updateToBuilder topic u of
                 Just b -> write b >> flush >> loop
                 Nothing -> loop
 
