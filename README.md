@@ -9,14 +9,17 @@ braid protocol server in haskell, implemented as wai middleware
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
-import Network.Wai.Middleware.Braid (braidify, streamUpdates, hasSubscription, status209, Update)
+import Network.Wai.Middleware.Braid (braidify, streamUpdates, hasSubscription, status209, Update, OutChannel(..), InChannel(..))
 import Network.Wai
-import Control.Concurrent.Chan (Chan, newChan)
+import Control.Concurrent.Chan (Chan, newChan, readChan, writeChan)
 import Network.Wai.Handler.Warp (run)
 import Network.HTTP.Types.Status (status200)
 
 instance OutChannel Chan where
     readChannel = readChan
+
+instance InChannel Chan where
+    writeChannel = writeChan
     
 application src req respond = respond $ 
     if hasSubscription req 
